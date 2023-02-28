@@ -43,7 +43,7 @@ New-Item -ItemType Directory -Path "$backupDir\$dirName"
 Push-Location $mysqlDataDir
 
 # iterate over the folder structure in the "data" folder to get the databases
-Get-ChildItem -Directory | ForEach-Object {
+Get-ChildItem -Directory | Where-Object { $_.Name -notin @('performance_schema', 'sys', 'mysql') } | ForEach-Object {
 
     # create subdirectory for the database backup
     $subDir = "$backupDir\$dirName\$($_.Name)"

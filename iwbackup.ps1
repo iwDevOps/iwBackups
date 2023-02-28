@@ -1,76 +1,84 @@
-# Define the database admin username and password
-$dbUser = "user"
-$dbPassword = "pass"
+# db admin user and password
+$dbUser = "iwdbuser2"
+$dbPassword = "1password2"
 
-# Define the IceWarp installation directory
+# IceWarp installation dir
 $iwMainDir = "C:\Program Files\IceWarp"
 
-# Define the backup retention temporary directory
+# backup retention temp dir
 $rtDir = "C:\Program Files\IceWarp\backup\temp"
 
-# Define the number of older backups to keep
+# how many older backups do we keep
 $rtDays = 3
 
-# Define the directory where backups will be stored
+# directory where to store the backups
 $backupDir = "C:\Program Files\IceWarp\backup\dbdump"
 
-# Define the MySQL data directory
-$mysqlDataDir = "C:\Program Files\MariaDB 10.2\data"
+# MySQL data dir
+$mysqlDataDir = "C:\Program Files\MariaDB 10.6\data"
 
-# Define the full path to the mysqldump.exe binary
-$mysqldump = "C:\Program Files\MariaDB 10.2\bin\mysqldump.exe"
+# full path to mysqldump.exe binary
+$mysqldump = "C:\Program Files\MariaDB 10.6\bin\mysqldump.exe"
 
-# Define the full path to the 7z.exe binary
+# full path to 7z.exe binary
 $zip = "C:\Program Files\7-Zip\7z.exe"
 
-# Check if the backup directory exists, if not create it
-if (!(Test-Path $backupDir)) {
-  New-Item -ItemType Directory -Path $backupDir
-}
+# check if backupDir and rtDir exist, create them if they don't
+if (-not (Test-Path $backupDir)) { mkdir $backupDir }
+if (-not (Test-Path $rtDir)) { mkdir $rtDir }
 
-# Check if the retention temporary directory exists, if not create it
-if (!(Test-Path $rtDir)) {
-  New-Item -ItemType Directory -Path $rtDir
-}
+# get current date and time
+$dateTime = Get-Date
+$yy = $dateTime.Year.ToString().PadLeft(4, "0")
+$mon = $dateTime.Month.ToString().PadLeft(2, "0")
+$dd = $dateTime.Day.ToString().PadLeft(2, "0")
+$hh = $dateTime.Hour.ToString().PadLeft(2, "0")
+$min = $dateTime.Minute.ToString().PadLeft(2, "0")
 
-# Get the date
-$date = Get-Date
-$yy = $date.Year.ToString().Substring(2)
-$mon = $date.Month.ToString().PadLeft(2, "0")
-$dd = $date.Day.ToString().PadLeft(2, "0")
+# create backup directory with current timestamp as the name
+$dirName = "$yy$mon$dd" + "_" + "$hh$min"
+New-Item -ItemType Directory -Path "$backupDir\$dirName"
 
-# Get the time
-$hh = $date.Hour.ToString().PadLeft(2, "0")
-$min = $date.Minute.ToString().PadLeft(2, "0")
-
-# Define the directory name using the date and time
-$dirName = "${yy}${mon}${dd}_${hh}${min}"
-
-# Change the current directory to the MySQL data directory
+# switch to the "data" folder
 Push-Location $mysqlDataDir
 
-# Get the databases in the data folder
+# iterate over the folder structure in the "data" folder to get the databases
 Get-ChildItem -Directory | ForEach-Object {
-  if (!(Test-Path "$backupDir\$dirName")) {
-    New-Item -ItemType Directory -Path "$backupDir\$dirName"
-  }
 
-  & $mysqldump --host="localhost" --user=$dbUser --password=$dbPassword --single-transaction --add-drop-table --databases $_.Name | Out-File "$backupDir\$dirName\$_.sql"
+    # create subdirectory for the database backup
+    $subDir = "$backupDir\$dirName\$($_.Name)"
+    New-Item -ItemType Directory -Path $subDir
 
-  & $zip a -tgzip "$backupDir\$dirName\$_.sql.gz" "$backupDir\$dirName\$_.sql"
+    # backup the database using mysqldump
+    & $mysqldump --host="127.0.0.1" --user=$dbUser --password=$dbPassword --single-transaction --add-drop-table --databases $_.Name > "$subDir\$($_.Name).sql"
 
-  Remove-Item "$backupDir\$dirName\$_.sql"
+    # compress the SQL dump file using 7-Zip
+    & $zip a -tgzip "$subDir\$($_.Name).sql.gz" "$subDir\$($_.Name).sql"
+
+    # delete the uncompressed SQL dump file
+    Remove-Item "$subDir\$($_.Name).sql"
 }
 
-# Return to the original directory
+# go back to the original location
 Pop-Location
 
-# Backup the server settings
-& $iwMainDir\tool.exe export account "*@*" u_backup | Out-File "$backupDir\$dirName\acc_u_backup.csv"
-& $iwMainDir\tool.exe export domain "*" d_backup | Out-File "$backupDir\$dirName\dom_d_backup.csv"
+# backup server settings
+& "$iwMainDir\tool.exe" export account "*@*" u_backup > "$backupDir\$dirName\acc_u_backup.csv"
+& "$iwMainDir\tool.exe" export domain "*" d_backup > "$backupDir\$dirName\dom_d_backup.csv"
 & $zip a -r "$backupDir\$dirName\cfg.7z" "$iwMainDir\config"
 & $zip a -r "$backupDir\$dirName\cal.7z" "$iwMainDir\calendar"
 
-# Remove backups older than 3 days
-Robocopy $backupDir $rtDir /mov /minage:$rtDays
-Remove-Item "$rtDir\*" -Force -Recurse
+# remove backups older than $rtDays days
+$oldBackups = Get-ChildItem -Path $backupDir | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$rtDays) }
+
+if ($oldBackups) {
+    # move the old backups to the retention temp dir
+    $oldBackups | Move-Item -Destination $rtDir -Force
+}
+
+# delete empty subdirectories from previous backups in the retention temp dir
+$emptyDirs = Get-ChildItem -Path $rtDir -Recurse -Directory | Where-Object { -not (Get-ChildItem -Path $_.FullName) }
+
+if ($emptyDirs) {
+    $emptyDirs | Remove-Item -Recurse
+}

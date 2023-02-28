@@ -1,6 +1,6 @@
 # db admin user and password
-$dbUser = "iwdbuser2"
-$dbPassword = "1password2"
+$dbUser = "iwdbuser"
+$dbPassword = "password"
 
 # IceWarp installation dir
 $iwMainDir = "C:\Program Files\IceWarp"

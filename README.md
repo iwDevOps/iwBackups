@@ -12,10 +12,10 @@ GRANT ALL PRIVILEGES ON *.* TO 'user'@'localhost';
 
 Verify  
 ```sql
-SELECT user FROM mysql.user WHERE host='localhost';
+SELECT user,host FROM mysql.user WHERE host='localhost';
 ```
 
-Verify Example
+Verify example output
 ```sql
 MariaDB [(none)]> SELECT user,host FROM mysql.user WHERE host='localhost'; 
 +-------------+-----------+
@@ -25,3 +25,4 @@ MariaDB [(none)]> SELECT user,host FROM mysql.user WHERE host='localhost';
 +-------------+-----------+
 ```
 
+## The backups are placed in the \backup\dbdump\ folder 
